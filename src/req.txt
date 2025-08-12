@@ -1,0 +1,16 @@
+# Core training & inference
+torch>=1.13.0
+transformers>=4.30.0
+
+# Retrieval
+faiss-cpu>=1.7.2
+
+# SQL execution & introspection
+sqlalchemy>=2.0.0
+
+# CLI & config
+python-dotenv>=1.0.0
+typer>=0.7.0
+
+# (Optional UI)
+streamlit>=1.24.0
