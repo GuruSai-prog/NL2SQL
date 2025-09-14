@@ -3,7 +3,7 @@ torch>=1.13.0
 transformers>=4.30.0
 
 # Retrieval
-faiss-cpu>=1.7.2
+faiss-cpu==1.8.0.post1
 
 # SQL execution & introspection
 sqlalchemy>=2.0.0
@@ -14,3 +14,5 @@ typer>=0.7.0
 
 # (Optional UI)
 streamlit>=1.24.0
+
+sentence-transformers>=2.2.2
