@@ -107,6 +107,5 @@ def main() -> None:
         print(f"  {rank}. {label} {ch.get('text', '')}")
     print(f"  Cosine similarities: {distances[0]}")
 
-
 if __name__ == "__main__":
     main()
