@@ -100,7 +100,7 @@ def main() -> None:
     args = ap.parse_args()
 
     db_path = Path(args.db).resolve()
-    db_name = db_path.stem  # e.g., "Chinook", "northwind", "academic"
+    db_name = db_path.stem
 
     out_dir = Path(args.out)
     schemas_dir = out_dir / "schemas"
