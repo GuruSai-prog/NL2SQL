@@ -229,6 +229,5 @@ def main() -> None:
     print("\nGenerated SQL:")
     print(sql)
 
-
 if __name__ == "__main__":
     main()
