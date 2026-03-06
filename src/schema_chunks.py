@@ -1,20 +1,44 @@
+"""
+schema_chunks.py
+----------------
+Reads a SQLite database, extracts table-level schema information, and writes:
+  - artifacts/schemas/<db_name>.json   – full schema as JSON
+  - artifacts/chunks/<db_name>.jsonl   – one line per table, used to build the FAISS index
+
+Usage:
+    python schema_chunks.py --db path/to/database.sqlite
+    python schema_chunks.py --db path/to/database.sqlite --out my_artifacts --preview 5
+"""
 from __future__ import annotations
-import argparse, json, sys
+
+import argparse
+import json
+import sys
 from pathlib import Path
 from typing import Dict, List
+
 from sqlalchemy import create_engine, inspect
 from sqlalchemy.engine import Engine
 
+
 def open_engine(db_path: Path) -> Engine:
+    """Return a SQLAlchemy engine for the given SQLite file."""
     if not db_path.exists():
-        raise FileNotFoundError(f"DB not found: {db_path}")
+        raise FileNotFoundError(f"Database file not found: {db_path}")
     return create_engine(f"sqlite:///{db_path.as_posix()}")
+
 
 def extract_schema(db_path: Path) -> Dict[str, dict]:
     """
-    Returns {table: {columns:[..], primary_keys:[..], foreign_keys:[..]}}
-    - columns: 'Name TYPE' (+ ' PRIMARY KEY' on PK columns)
-    - foreign_keys: 'colA,colB -> OtherTable(OtherColA,OtherColB)'
+    Inspect a SQLite database and return its schema as a dict:
+        {
+          "<table>": {
+            "columns":      ["col_name TYPE", ...],
+            "primary_keys": ["col_name", ...],
+            "foreign_keys": ["col -> OtherTable(other_col)", ...]
+          },
+          ...
+        }
     """
     eng = open_engine(db_path)
     insp = inspect(eng)
@@ -22,17 +46,17 @@ def extract_schema(db_path: Path) -> Dict[str, dict]:
     tables = [t for t in insp.get_table_names() if not t.startswith("sqlite_")]
     schema: Dict[str, dict] = {}
 
-    for t in tables:
-        cols = insp.get_columns(t)
-        pks = set(insp.get_pk_constraint(t).get("constrained_columns") or [])
-        fks_raw = insp.get_foreign_keys(t)
+    for table in tables:
+        cols = insp.get_columns(table)
+        pks = set(insp.get_pk_constraint(table).get("constrained_columns") or [])
+        fks_raw = insp.get_foreign_keys(table)
 
         col_texts: List[str] = []
-        for c in cols:
-            txt = f"{c['name']} {c['type']}"
-            if c["name"] in pks:
-                txt += " PRIMARY KEY"
-            col_texts.append(txt)
+        for col in cols:
+            entry = f"{col['name']} {col['type']}"
+            if col["name"] in pks:
+                entry += " PRIMARY KEY"
+            col_texts.append(entry)
 
         fk_texts: List[str] = []
         for fk in fks_raw:
@@ -43,60 +67,73 @@ def extract_schema(db_path: Path) -> Dict[str, dict]:
             right = ",".join(fk.get("referred_columns") or [])
             fk_texts.append(f"{left} -> {ref_table}({right})")
 
-        schema[t] = {
+        schema[table] = {
             "columns": col_texts,
             "primary_keys": list(pks),
             "foreign_keys": fk_texts,
         }
+
     return schema
 
+
 def make_chunks(db_name: str, schema: Dict[str, dict]) -> List[dict]:
-    """One chunk per table → {'db','table','text'}"""
+    """
+    Convert a schema dict into a list of text chunks (one per table).
+    Each chunk is: {"db": <db_name>, "table": <table>, "text": <human-readable description>}
+    """
     chunks: List[dict] = []
-    for t, info in schema.items():
-        txt = f"Table: {t}. Columns: {', '.join(info['columns'])}."
+    for table, info in schema.items():
+        text = f"Table: {table}. Columns: {', '.join(info['columns'])}."
         if info["foreign_keys"]:
-            txt += f" Foreign keys: {', '.join(info['foreign_keys'])}."
-        chunks.append({"db": db_name, "table": t, "text": txt})
+            text += f" Foreign keys: {', '.join(info['foreign_keys'])}."
+        chunks.append({"db": db_name, "table": table, "text": text})
     return chunks
 
-def main():
-    ap = argparse.ArgumentParser(description="Extract schema & emit table-level chunks")
-    ap.add_argument("--db", required=True, help="Path to .sqlite/.db file")
-    ap.add_argument("--out", default="artifacts", help="Output dir (default: artifacts)")
-    ap.add_argument("--preview", type=int, default=3, help="How many chunks to print")
+
+def main() -> None:
+    ap = argparse.ArgumentParser(
+        description="Extract schema from a SQLite database and emit table-level chunks."
+    )
+    ap.add_argument("--db", required=True, help="Path to .sqlite or .db file")
+    ap.add_argument("--out", default="artifacts", help="Output directory (default: artifacts)")
+    ap.add_argument("--preview", type=int, default=3, help="Number of chunks to print (default: 3)")
     args = ap.parse_args()
 
     db_path = Path(args.db).resolve()
-    db_name = db_path.stem  # e.g., Chinook / northwind / academic
+    db_name = db_path.stem  # e.g., "Chinook", "northwind", "academic"
 
     out_dir = Path(args.out)
-    (out_dir / "schemas").mkdir(parents=True, exist_ok=True)
-    (out_dir / "chunks").mkdir(parents=True, exist_ok=True)
+    schemas_dir = out_dir / "schemas"
+    chunks_dir = out_dir / "chunks"
+    schemas_dir.mkdir(parents=True, exist_ok=True)
+    chunks_dir.mkdir(parents=True, exist_ok=True)
 
     try:
         schema = extract_schema(db_path)
-    except Exception as e:
-        print(f"[ERROR] {type(e).__name__}: {e}", file=sys.stderr)
+    except Exception as exc:
+        print(f"[ERROR] {type(exc).__name__}: {exc}", file=sys.stderr)
         sys.exit(1)
+
+    if not schema:
+        print(f"[WARNING] No tables found in {db_path}", file=sys.stderr)
+        sys.exit(0)
 
     chunks = make_chunks(db_name, schema)
 
-    # Save files
-    (out_dir / "schemas" / f"{db_name}.json").write_text(
-        json.dumps(schema, indent=2), encoding="utf-8"
-    )
-    with (out_dir / "chunks" / f"{db_name}.jsonl").open("w", encoding="utf-8") as f:
-        for ch in chunks:
-            f.write(json.dumps(ch, ensure_ascii=False) + "\n")
+    schema_file = schemas_dir / f"{db_name}.json"
+    chunks_file = chunks_dir / f"{db_name}.jsonl"
 
-    print(f"✔ {db_name}: {len(schema)} tables")
-    for ch in chunks[: args.preview]:
-        print("—", ch["text"])
-    print("Saved:",
-          out_dir / "schemas" / f"{db_name}.json",
-          "and",
-          out_dir / "chunks" / f"{db_name}.jsonl")
+    schema_file.write_text(json.dumps(schema, indent=2), encoding="utf-8")
+    with chunks_file.open("w", encoding="utf-8") as f:
+        for chunk in chunks:
+            f.write(json.dumps(chunk, ensure_ascii=False) + "\n")
+
+    print(f"✔  {db_name}: {len(schema)} tables extracted")
+    for chunk in chunks[: args.preview]:
+        print("   —", chunk["text"])
+    print(f"\nSaved schema → {schema_file}")
+    print(f"Saved chunks → {chunks_file}")
+
 
 if __name__ == "__main__":
     main()
