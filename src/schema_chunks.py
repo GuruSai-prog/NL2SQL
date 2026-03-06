@@ -76,6 +76,7 @@ def extract_schema(db_path: Path) -> Dict[str, dict]:
     return schema
 
 
+
 def make_chunks(db_name: str, schema: Dict[str, dict]) -> List[dict]:
     """
     Convert a schema dict into a list of text chunks (one per table).
