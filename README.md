@@ -179,7 +179,3 @@ python src/build_index.py \
 | `--top_k` | `nl2sql.py` | `5` | Schema chunks to retrieve |
 
 ---
-
-## License
-
-MIT
