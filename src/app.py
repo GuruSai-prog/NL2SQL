@@ -1,11 +1,4 @@
-"""
-app.py
-------
-Streamlit UI for the NL2SQL pipeline.
 
-Run with:
-    streamlit run src/app.py
-"""
 import os
 import sys
 from pathlib import Path
