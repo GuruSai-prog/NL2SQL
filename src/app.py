@@ -13,23 +13,16 @@ from pathlib import Path
 import streamlit as st
 from dotenv import load_dotenv
 
-# Allow imports from the src directory when running via `streamlit run src/app.py`
 sys.path.insert(0, str(Path(__file__).parent))
 
-from nl2sql import NL2SQL  # noqa: E402  (after sys.path update)
+from nl2sql import NL2SQL
 
 load_dotenv()
 
-# ---------------------------------------------------------------------------
-# Page config
-# ---------------------------------------------------------------------------
 st.set_page_config(page_title="NL2SQL", page_icon="🗄️", layout="centered")
 st.title("🗄️ NL2SQL")
 st.caption("Ask a question in plain English — get back a SQL query.")
 
-# ---------------------------------------------------------------------------
-# Sidebar: settings
-# ---------------------------------------------------------------------------
 st.sidebar.header("Settings")
 
 index_dir = st.sidebar.text_input(
@@ -44,7 +37,6 @@ embedding_model = st.sidebar.selectbox(
     index=0,
 )
 
-# LLM key check
 active_backend = None
 for env_var, label in [
     ("GROQ_API_KEY", "Groq"),
@@ -60,9 +52,6 @@ if active_backend:
 else:
     st.sidebar.error("No LLM API key found. Add one to your .env file.")
 
-# ---------------------------------------------------------------------------
-# Load pipeline (cached so it doesn't reload on every interaction)
-# ---------------------------------------------------------------------------
 
 @st.cache_resource(show_spinner="Loading index…")
 def get_pipeline(idx_dir: str, model: str, k: int) -> NL2SQL:
@@ -78,9 +67,6 @@ except FileNotFoundError as e:
     )
     st.stop()
 
-# ---------------------------------------------------------------------------
-# Main area
-# ---------------------------------------------------------------------------
 question = st.text_input(
     "Your question",
     placeholder="e.g. Which artists have more than 10 albums?",

@@ -22,10 +22,6 @@ import faiss
 from sentence_transformers import SentenceTransformer
 
 
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-
 def _normalize_l2(x: np.ndarray) -> np.ndarray:
     """Normalize each row of *x* to unit length (in-place). Handles zero vectors."""
     norms = np.linalg.norm(x, axis=1, keepdims=True)
@@ -54,10 +50,6 @@ def load_chunks(jsonl_path: str) -> Tuple[List[Dict], List[str]]:
     return chunks, texts
 
 
-# ---------------------------------------------------------------------------
-# Main
-# ---------------------------------------------------------------------------
-
 def main() -> None:
     parser = argparse.ArgumentParser(
         description="Build a FAISS cosine-similarity index from schema chunks."
@@ -72,13 +64,11 @@ def main() -> None:
     out_dir = Path(args.out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    # 1. Load chunks
     chunks, texts = load_chunks(args.chunks_file)
     if not texts:
         raise ValueError(f"No usable text found in {args.chunks_file}")
     print(f"Loaded {len(chunks)} chunks from {args.chunks_file}")
 
-    # 2. Encode with sentence-transformer
     model = SentenceTransformer(args.model)
     embs = model.encode(texts, batch_size=64, convert_to_numpy=True, show_progress_bar=True)
     if embs.ndim == 1:
@@ -86,23 +76,19 @@ def main() -> None:
     embs = np.ascontiguousarray(embs, dtype=np.float32)
     print(f"Embeddings: {embs.shape}, dtype={embs.dtype}")
 
-    # 3. L2-normalise → dot-product becomes cosine similarity
     embs = _normalize_l2(embs)
 
-    # 4. Build a flat inner-product index
     dim = embs.shape[1]
     index = faiss.IndexFlatIP(dim)
-    index.add(embs)  # type: ignore[arg-type]
+    index.add(embs)
     assert index.ntotal == len(chunks), "FAISS add() did not store all vectors"
     print(f"FAISS index built: {index.ntotal} vectors, dim={dim}")
 
-    # 5. Persist index + metadata
     faiss.write_index(index, str(out_dir / "schema.faiss"))
     (out_dir / "meta.json").write_text(json.dumps(chunks, indent=2), encoding="utf-8")
     print(f"Saved index → {out_dir / 'schema.faiss'}")
     print(f"Saved metadata → {out_dir / 'meta.json'}")
 
-    # 6. Optional smoke-test
     print(f"\n--- Smoke-test: top-{args.k} for '{args.sample}' ---")
     qv = model.encode([args.sample], convert_to_numpy=True)
     qv = np.ascontiguousarray(qv, dtype=np.float32)
@@ -114,7 +100,7 @@ def main() -> None:
             "Ensure the same model is used for indexing and querying."
         )
     qv = _normalize_l2(qv)
-    distances, indices = index.search(qv, args.k)  # type: ignore[arg-type]
+    distances, indices = index.search(qv, args.k)
     for rank, idx in enumerate(indices[0], start=1):
         ch = chunks[int(idx)]
         label = f"[{ch.get('db', '?')}.{ch.get('table', '?')}]"

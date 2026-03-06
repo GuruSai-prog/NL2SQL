@@ -45,10 +45,6 @@ from sentence_transformers import SentenceTransformer
 load_dotenv()
 
 
-# ---------------------------------------------------------------------------
-# Retrieval helpers
-# ---------------------------------------------------------------------------
-
 def _normalize_l2(x: np.ndarray) -> np.ndarray:
     norms = np.linalg.norm(x, axis=1, keepdims=True)
     norms = np.where(norms == 0.0, 1.0, norms)
@@ -69,10 +65,6 @@ def load_index(index_dir: str | Path) -> Tuple[faiss.Index, List[Dict]]:
     chunks: List[Dict] = json.loads(meta_path.read_text(encoding="utf-8"))
     return index, chunks
 
-
-# ---------------------------------------------------------------------------
-# Prompt builder
-# ---------------------------------------------------------------------------
 
 _SYSTEM_PROMPT = (
     "You are an expert SQL assistant. "
@@ -100,12 +92,8 @@ def build_prompt(question: str, schema_chunks: List[Dict]) -> str:
     """)
 
 
-# ---------------------------------------------------------------------------
-# LLM back-ends
-# ---------------------------------------------------------------------------
-
 def _call_groq(prompt: str, system: str) -> str:
-    from groq import Groq  # type: ignore[import]
+    from groq import Groq
     client = Groq(api_key=os.environ["GROQ_API_KEY"])
     response = client.chat.completions.create(
         model="llama3-8b-8192",
@@ -120,7 +108,7 @@ def _call_groq(prompt: str, system: str) -> str:
 
 
 def _call_openai(prompt: str, system: str) -> str:
-    from openai import OpenAI  # type: ignore[import]
+    from openai import OpenAI
     client = OpenAI(api_key=os.environ["OPENAI_API_KEY"])
     response = client.chat.completions.create(
         model="gpt-3.5-turbo",
@@ -136,7 +124,7 @@ def _call_openai(prompt: str, system: str) -> str:
 
 def _call_hf(prompt: str, system: str) -> str:
     """Calls the HuggingFace Inference API (text-generation endpoint)."""
-    import requests  # type: ignore[import]
+    import requests
     full_prompt = f"{system}\n\n{prompt}"
     headers = {"Authorization": f"Bearer {os.environ['HF_API_KEY']}"}
     payload = {
@@ -166,10 +154,6 @@ def call_llm(prompt: str, system: str = _SYSTEM_PROMPT) -> str:
     )
 
 
-# ---------------------------------------------------------------------------
-# Main pipeline class
-# ---------------------------------------------------------------------------
-
 class NL2SQL:
     """
     End-to-end NL-to-SQL pipeline.
@@ -196,7 +180,6 @@ class NL2SQL:
         self.embed_model = SentenceTransformer(embedding_model)
         self._dim = self.index.d
 
-    # ------------------------------------------------------------------
     def retrieve(self, question: str, k: Optional[int] = None) -> List[Dict]:
         """Return the top-k schema chunks most relevant to *question*."""
         k = k or self.top_k
@@ -210,10 +193,9 @@ class NL2SQL:
                 "Use the same embedding model as during indexing."
             )
         qv = _normalize_l2(qv)
-        _, indices = self.index.search(qv, k)  # type: ignore[arg-type]
+        _, indices = self.index.search(qv, k)
         return [self.chunks[int(i)] for i in indices[0] if 0 <= int(i) < len(self.chunks)]
 
-    # ------------------------------------------------------------------
     def query(self, question: str, k: Optional[int] = None) -> str:
         """
         Full pipeline: retrieve relevant schema → build prompt → call LLM.
@@ -224,10 +206,6 @@ class NL2SQL:
         prompt = build_prompt(question, context_chunks)
         return call_llm(prompt)
 
-
-# ---------------------------------------------------------------------------
-# CLI entry-point
-# ---------------------------------------------------------------------------
 
 def main() -> None:
     import argparse
