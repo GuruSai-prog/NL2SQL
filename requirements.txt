@@ -19,3 +19,4 @@ python-dotenv>=1.0.0
 
 # Optional: Streamlit UI
 streamlit>=1.28.0
+
